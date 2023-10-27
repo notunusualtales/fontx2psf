@@ -118,9 +118,11 @@ int copy_data(int in, int out, uint32_t margin, struct fontx_header *header)
 	uint32_t top = margin / 2;
 	uint32_t bottom = (margin + 1) / 2;
 
-	size_t wh = CHARLINE_BYTES(header->width) * header->height;
-	size_t wt = CHARLINE_BYTES(header->width) * top;
-	size_t mb = CHARLINE_BYTES(header->width) * bottom + wt;
+	uint32_t cb = CHARLINE_BYTES(header->width);
+
+	uint32_t wh = cb * header->height;
+	uint32_t wt = cb * top;
+	uint32_t mb = cb * bottom + wt;
 
 	for (;;) {
 		ssize_t sz = read(in, &buf[wt], wh);
