@@ -50,6 +50,14 @@ struct psf2_header {
 	uint32_t width;
 };
 
+#define CHARLINE_BYTES(w) (((w) + 7) / 8)
+
+#define PSF_VERSION_1 (1)
+#define PSF_VERSION_2 (2)
+
+#define MARGIN_MIN (0)
+#define MARGIN_MAX (8)
+
 void read_fontx_header(int fd, struct fontx_header *header)
 {
 	ssize_t sz = sizeof(struct fontx_header);
@@ -61,12 +69,14 @@ void read_fontx_header(int fd, struct fontx_header *header)
 	}
 }
 
-void write_psf1_header(int fd, struct fontx_header *header)
+void write_psf1_header(int fd, uint32_t margin, struct fontx_header *header)
 {
+	uint32_t height = header->height + margin;
+
 	struct psf1_header h = {
 		.magic    = { PSF1_MAGIC0, PSF1_MAGIC1 },
 		.mode     = 0,
-		.charsize = header->height
+		.charsize = height * CHARLINE_BYTES(header->width)
 	};
 
 	ssize_t sz = sizeof(struct psf1_header);
@@ -78,16 +88,18 @@ void write_psf1_header(int fd, struct fontx_header *header)
 	}
 }
 
-void write_psf2_header(int fd, struct fontx_header *header)
+void write_psf2_header(int fd, uint32_t margin, struct fontx_header *header)
 {
+	uint32_t height = header->height + margin;
+
 	struct psf2_header h = {
 		.magic      = { PSF2_MAGIC0, PSF2_MAGIC1, PSF2_MAGIC2, PSF2_MAGIC3 },
 		.version    = 0,
 		.headersize = sizeof(struct psf2_header),
 		.flags      = 0,
 		.length     = PSF2_CODEBLOCKS,
-		.charsize   = header->height * ((header->width + 7) / 8),
-		.height     = header->height,
+		.charsize   = height * CHARLINE_BYTES(header->width),
+		.height     = height,
 		.width      = header->width
 	};
 
@@ -98,14 +110,24 @@ void write_psf2_header(int fd, struct fontx_header *header)
 	}
 }
 
-int copy_data(int in, int out)
+int copy_data(int in, int out, uint32_t margin, struct fontx_header *header)
 {
 	char buf[BUFSIZ];
+	memset(buf, 0, BUFSIZ);
+
+	uint32_t top = margin / 2;
+	uint32_t bottom = (margin + 1) / 2;
+
+	size_t wh = CHARLINE_BYTES(header->width) * header->height;
+	size_t wt = CHARLINE_BYTES(header->width) * top;
+	size_t mb = CHARLINE_BYTES(header->width) * bottom + wt;
 
 	for (;;) {
-		ssize_t sz = read(in, buf, BUFSIZ);
+		ssize_t sz = read(in, &buf[wt], wh);
 
 		if (sz > 0) {
+			sz += mb;
+
 			if (write(out, buf, sz) != sz) {
 				fprintf(stderr, "ERROR: Unable to write psf data: %s\n",
 					errno ? strerror(errno) : "(Unknown)");
@@ -123,19 +145,76 @@ int copy_data(int in, int out)
 	}
 }
 
+void usage(FILE *file, char *name)
+{
+	fprintf(file, "Usage: %s [-p psfver] [-m margin]\n", name);
+	fprintf(file, "    psfver: %d or %d (default: %d)\n", PSF_VERSION_1, PSF_VERSION_2, PSF_VERSION_2);
+	fprintf(file, "    margin: %d - %d (default: %d)\n", MARGIN_MIN, MARGIN_MAX, MARGIN_MIN);
+}
+
+void parse(int argc, char *argv[], uint32_t *psfver, uint32_t *margin)
+{
+	char *name = argv[0];
+
+	*psfver = PSF_VERSION_2;
+	*margin = MARGIN_MIN;
+
+	int opt = 0;
+
+	optarg = NULL;
+	optind = 1;
+	opterr = 1;
+	optopt = 0;
+
+	while ((opt = getopt(argc, argv, "p:m:h")) != -1) {
+		switch (opt) {
+		case 'p':
+			int p = atoi(optarg);
+			if (p == PSF_VERSION_1 || p == PSF_VERSION_2) {
+				*psfver = p;
+				break;
+			} else {
+				fprintf(stderr, "%s: invalid parameter: -p [%s]\n", name, optarg);
+				exit(EXIT_FAILURE);
+			}
+		case 'm':
+			int m = atoi(optarg);
+			if (MARGIN_MIN <= m && m <= MARGIN_MAX) {
+				*margin = m;
+				break;
+			} else {
+				fprintf(stderr, "%s: invalid parameter: -m [%s]\n", name, optarg);
+				exit(EXIT_FAILURE);
+			}
+		case 'h':
+			usage(stdout, name);
+			exit(EXIT_SUCCESS);
+
+		default:
+			usage(stderr, name);
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
+	uint32_t psfver = PSF_VERSION_2;
+	uint32_t margin = MARGIN_MIN;
+
+	parse(argc, argv, &psfver, &margin);
+
 	struct fontx_header fontx_header = {};
 
 	read_fontx_header(STDIN_FILENO, &fontx_header);
 
-	if (argc > 1 && *argv[1] == '1') {
-		write_psf1_header(STDOUT_FILENO, &fontx_header);
+	if (psfver == PSF_VERSION_1) {
+		write_psf1_header(STDOUT_FILENO, margin, &fontx_header);
 	} else {
-		write_psf2_header(STDOUT_FILENO, &fontx_header);
+		write_psf2_header(STDOUT_FILENO, margin, &fontx_header);
 	}
 
-	copy_data(STDIN_FILENO, STDOUT_FILENO);
+	copy_data(STDIN_FILENO, STDOUT_FILENO, margin, &fontx_header);
 
 	return 0;
 }
