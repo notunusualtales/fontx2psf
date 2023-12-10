@@ -23,8 +23,8 @@ struct fontx_header {
 	uint8_t codeflag;
 };
 
-#define PSF1_MAGIC0     (0x36)
-#define PSF1_MAGIC1     (0x04)
+#define PSF1_MAGIC0 (0x36)
+#define PSF1_MAGIC1 (0x04)
 
 struct psf1_header {
 	uint8_t magic[2];
