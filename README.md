@@ -9,9 +9,11 @@ $ make
 
 ## Usage
 ```
-Usage: ./fontx2psf [-p psfver] [-m margin]
-    psfver: 1 or 2 (default: 2)
-    margin: 0 - 8 (default: 0)
+Usage: ./fontx2psf [-p psfver] [-m margin] [-i height] [-N]
+    -p psfver: 1 or 2 (default: 2)
+    -m margin: 0 - 8 (default: 0)
+    -i height: the font height (16,19,24) for PC DOS fonts
+    -N       : no magic in the header
 ```
 
 ### Convert to PSF2 format
